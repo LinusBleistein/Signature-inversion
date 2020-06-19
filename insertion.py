@@ -132,5 +132,33 @@ def solve_optimization_problem(signature,signature_next_step,p,n,dimension):
     return x_optimal  
 
 
+def invert_signature(signature_full,n,first_point,dimension):
+    """Recontruct the path from its signature
+    
+    Arguments
+    ---------
+    signature_full: signature truncated at order n+1
+    n: order of signature used for the reconstruction
+    """
+    
+    signature_pre=signature_full[:,:-dimension**(n+1)]
+    
+    reconstructed_path_derivatives = np.zeros((n+1,dimension))
+
+    reconstructed_path = np.zeros((n+2,dimension))
+    reconstructed_path[0,:]=first_point
+
+    for p in np.arange(1,n+2):
+
+        x_optimal = solve_optimization_problem(signature_pre, signature_full,p,n=n,dimension=dimension)
+
+        reconstructed_path_derivatives[p-1,:] = x_optimal 
+
+        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/(n+1))
+    
+    return(reconstructed_path)
+
+
+
 
 
