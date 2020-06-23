@@ -90,8 +90,7 @@ def get_A_matrix(p,signature,order,dimension):
     
     length = get_length(signature,dimension,order)
     #print(length)
-    #return length*total_tensor
-    return(total_tensor)
+    return length*total_tensor
     
 def solve_optimization_problem(signature,signature_next_step,p,n,dimension):
     

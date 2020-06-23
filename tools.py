@@ -48,6 +48,6 @@ def get_length(signature,dimension,order):
     
     last_signature_term = signatory.extract_signature_term(signature,dimension,int(order))
     
-    return torch.norm(math.factorial(order)*last_signature_term,2)*(1/order)
+    return torch.norm(math.factorial(order)*last_signature_term,2)**(1/order)
 
 
