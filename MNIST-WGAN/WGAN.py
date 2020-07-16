@@ -64,3 +64,43 @@ class discriminateur(nn.Module):
         x = F.relu(x)
         x = self.layer8(x)
         return x
+
+
+class generateur_small(nn.Module):
+    
+    def __init__(self,input_length:int,middle_length:int, output_length:int):
+        super(generateur_small,self).__init__()
+        self.layer1 = nn.Linear(int(input_length), int(middle_length),bias=True)
+        self.layer2 = nn.Linear(int(middle_length),int(middle_length),bias=True)
+        self.layer3 = nn.Linear(int(middle_length),int(middle_length),bias=True)
+        self.layer4= nn.Linear(int(middle_length),int(output_length),bias = True)
+        
+    def forward(self,x):
+        x = self.layer1(x)
+        x = F.relu(x)
+        x = self.layer2(x)
+        x = F.relu(x)
+        x = self.layer3(x)
+        x = F.relu(x)
+        x = self.layer4(x)
+        return x
+
+class discriminateur_small(nn.Module):
+    
+    def __init__(self,input_length:int,middle_length:int):
+        super(discriminateur_small,self).__init__()
+        self.layer1 = nn.Linear(int(input_length), int(middle_length),bias=True)
+        self.layer2 = nn.Linear(int(middle_length),int(middle_length),bias=True)
+        self.layer3 = nn.Linear(int(middle_length),int(middle_length),bias=True)
+        self.layer4 = nn.Linear(int(middle_length),1)
+        
+    def forward(self,x):
+        x = self.layer1(x)
+        x = F.relu(x)
+        x = self.layer2(x)
+        x = F.relu(x)
+        x = self.layer3(x)
+        x = F.relu(x)
+        x = self.layer4(x)
+        return x
+

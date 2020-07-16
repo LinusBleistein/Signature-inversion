@@ -14,7 +14,7 @@ import torch.nn.functional as F
 from torch import autograd
 from torch.autograd import Variable
 
-from Tools import generateur_donnees, generate_noise, gradient_penalty, extrapolate_signature,extrapolate_multiple_signatures
+from tools import generateur_donnees, generate_noise, gradient_penalty, extrapolate_signature,extrapolate_multiple_signatures
 
 from get_data import get_pendigits
 
@@ -68,6 +68,7 @@ def train_MNIST(iterations,noise_size, generateur, discriminateur, optigen, opti
             batch_id = np.random.choice(np.arange(0,training_size),batch_size)
             
             true_datas = training_data[batch_id,:]
+
 
             d_loss_real = discriminateur(true_datas) 
             d_loss_real  = d_loss_real.mean()

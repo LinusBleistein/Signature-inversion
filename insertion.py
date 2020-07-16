@@ -2,12 +2,12 @@ import numpy as np
 import math
 import torch
 import seaborn as sns
-
+import sys,os
 import signatory
 import itertools
 
 import time
-
+sys.path.append(os.path.dirname(os.getcwd()))
 
 from tools import get_signature_as_tensor,get_length
 
