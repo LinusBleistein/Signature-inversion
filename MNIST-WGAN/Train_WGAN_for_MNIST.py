@@ -31,9 +31,9 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 # Settings #
 ############
 
-noise_size = 8 #Size of the latent space of the generator, ie size of the input noise 
+noise_size = 10 #Size of the latent space of the generator, ie size of the input noise 
 
-n = 100 #Number of training iterations
+n = 20000 #Number of training iterations
 
 signature_order = 10 #Order of the generated signatures 
 
@@ -45,10 +45,10 @@ integer = 3 #MNIST digit you want to generate
 
 signature_length = signature.siglength(2,signature_order)
 
-#gen =generateur(noise_size,signature_length*2,signature_length)
-gen =generateur_small(noise_size,248,signature_length)
+gen =generateur(noise_size,signature_length*2,signature_length)
+#gen =generateur_small(noise_size,248,signature_length)
 
-discrim = discriminateur_small(signature_length,2048)
+discrim = discriminateur(signature_length,signature_length*2)
 
 optimisateur_generateur = optim.Adam(gen.parameters(),lr = 0.0001, betas = (0.5,0.999))
 optimisateur_discriminateur = optim.Adam(discrim.parameters(),lr=0.0001,betas = (0.5,0.999))
