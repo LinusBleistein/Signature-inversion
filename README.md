@@ -18,6 +18,16 @@ inverted_path=invert_signature(sig,n,d,first_point=x0)
 Some examples are given in the notebook `Example.ipynb`.
 
 
+## Environment
+
+The packages are listed in `requirements.txt`. Run the following two lines to set up the environment (signatory must be installed after PyTorch):
+
+```
+pip install -r requirements.txt
+pip install signatory==1.2.2.1.5.0 --no-cache-dir --force-reinstall
+```
+
+
 ## References
 
 
