@@ -16,3 +16,9 @@ inverted_path=invert_signature(sig,n,d,first_point=x0)
 ```
 
 Some examples are given in the notebook `Example.ipynb`.
+
+
+## References
+
+
+[1]: Chang, J. and Lyons, T. (2019) [Insertion algorithm for inverting the signature of a path](https://arxiv.org/abs/1907.08423)

@@ -212,19 +212,12 @@ def invert_signature(signature,n,d,first_point=None):
 
 
 if __name__ == '__main__':
-    n=2
+    n=3
     d=5
     test_path = torch.rand((1,10,d))
     signature_test = signatory.signature(test_path,n)
-    print(signature_test.shape)
-    x=[1,2,3,4,5]
-    p=3
-    #A_matrix=get_A_matrix(signature_test,p,n,d)
-    #signature = signatory.signature(test_path, 2)
-    signature_next = signatory.signature(test_path,n+1)
 
-    solve_optimization_problem(signature_next,p,n+1,d)
-    invert_signature(signature_next,n+1,d,first_point=torch.zeros(d))
+    invert_signature(signature_test,n,d,first_point=torch.zeros(d))
 
 
 
