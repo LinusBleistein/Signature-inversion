@@ -1,132 +1,144 @@
 import numpy as np
 import math
 import torch
-import seaborn as sns
-import sys,os
+
 import signatory
 import itertools
 
-import time
-sys.path.append(os.path.dirname(os.getcwd()))
+from tools import get_length
 
-from tools import get_signature_as_tensor,get_length
-
-def Insertion(p,n,x,signature,dimension):
-
+def Insertion(signature,x,p,n,d):
     '''This function computes the Insertion operator taken at x, for parameters p and n.
 
-    Arguments :
+    Arguments
+    ---------
+        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
+            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
 
-        - x : vector in R^dimension at which the operator should be evaluated.
-        - p : insertion spot.
-        - n : total depth of the signature.
-        - signature : total signature of a path
-        - dimension : dimension of the path.
+
+        x : array, shape (d,)
+            Vector in R^d at which the operator is evaluated.
+        
+        p : int
+            Insertion spot.
+
+        n : int
+            Depth of the signature.
+        
+        d : int
+            Dimension of the underlying path.
+
+    Returns
+    -------
+        new_tensor:torch.Tensor, shape (d,...,d) (where d is repeated n+1 times)
+            A (n+1)-dimensional tensor in R^d corresponding to the insertion of x in the order n signature.
     '''
 
-    #Get the last (n-th) term of the signature as a tensor of size (R^dimension)^{\otimes n}
+    #Get the last (n-th) term of the signature as a tensor of size (R^d)^{\otimes n}
 
-    last_signature_term = get_signature_as_tensor(signature,dimension,n)["Depth "+ str(n)]
+    last_signature_term = signatory.extract_signature_term(signature,d,n)
+    last_signature_term=last_signature_term.view([d]*int(n))
 
     #Add a dimension, since the output of the operator should be in (R^d)^{\otimes (n+1)}
-
-    new_tensor = new_tensor=torch.empty([dimension]*(n+1))
+    new_tensor=torch.empty([d]*(n+1))
 
     #Creates a list containing all possible coordinates of the big tensor.
-    #This list is of length dimension**n.
+    #This list is of length d**n.
 
-    tensor_size = np.arange(dimension)
-
-    coordinates_list = list(itertools.product(tensor_size,repeat= n+1))
-
+    coordinates_list = list(itertools.product(torch.arange(d),repeat= n+1))
 
     #Every element of coordinates_list is a coordinate of the new tensor, which has d^(n+1) coordinates.
 
     #Computes the Insertion operator.
-
     for coordinate in coordinates_list:
-
         coordinate = list(coordinate)
 
-        x_coordinate = x[coordinate[p-1]]
-
         new_coordinate = coordinate.copy()
-
         del new_coordinate[p-1]
 
-        new_tensor[tuple(coordinate)] = last_signature_term[tuple(new_coordinate)]*x_coordinate
-
+        new_tensor[tuple(coordinate)] = last_signature_term[tuple(new_coordinate)]*x[coordinate[p-1]]
 
     return math.factorial(n)*new_tensor
 
-def get_A_matrix(p,signature,order,dimension):
-
+def get_A_matrix(signature,p,n,d):
     '''This function creates the matrix lenght_of_path*A, used in the optimization problem.
 
-        Arguments:
-            - p : insertion spot.
-            - signature : full original signature.
-            - order : order of truncation of signature.
-            - dimension : dimension of the path.
+     Arguments
+    ---------
+        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
+            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
+        
+        p : int
+            Insertion spot.
 
+        n : int
+            Depth of the signature.
+        
+        d : int
+            Dimension of the underlying path.
+
+    Returns
+    -------
+        A: torch.tensor, shape (d^(n+1),d)
+            Matrix A representing the linear insertion map.
     '''
 
     #Create basis of R^d
 
-    basis = np.eye(dimension,dimension)
+    basis = torch.diag(torch.ones(d))
 
     #Evaluate the insertion operator on the basis
 
-    total_tensor = np.zeros(shape=(dimension**(order + 1),dimension))
-    for row in np.arange(dimension):
+    A = torch.zeros([d**(n + 1),d])
+    for row in np.arange(d):
         base_vector = basis[row,:]
-        insertion_tensor = Insertion(p,order,base_vector,signature,dimension)
-        #insertion_tensor = insertion_tensor.reshape(-1,dimension)
+        insertion_tensor = Insertion(signature,base_vector,p,n,d)
+        A[:,row]=insertion_tensor.flatten()
 
-        insertion_tensor = insertion_tensor.flatten()
-        #total_tensor[row*(dimension**(order)):(row+1)*(dimension**(order)),:] = insertion_tensor
-        total_tensor[:,row]=insertion_tensor
+    A = A.reshape(d**(n+1),d)
 
-    total_tensor = total_tensor.reshape(dimension**(order+1),dimension)
+    length = get_length(signature,d,n)
+    return length*A
 
-    length = get_length(signature,dimension,order)
-    #print(length)
-    return length*total_tensor
+def solve_optimization_problem(signature,p,n,d):
 
-def solve_optimization_problem(signature,signature_next_step,p,n,dimension):
-
-    '''This function solves the optimization problem that allows to approximate the signature
+    '''This function solves the optimization problem that allows to approximate the derivatives of the path.
         of the path.
 
-        Arguments:
-            - n : order at which the signature is taken.
-            - signature : full signature at order n.
-            - signature_next_step : full signature at order n+1 (!).
-            - p : insertion spot, determinates the time interval on which the derivative is approximated.
-            - dimension : dimension of the path.
+    Arguments
+    ---------
+        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
+            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
+        
+        p : int
+            Insertion spot.
+
+        n : int
+            Depth of the signature.
+        
+        d : int
+            Dimension of the underlying path.
+
+    Returns
+    -------
+        x_optimal: array, shape (d,)
+            Solution of the optimization problem, approximation of the derivative of the path on the pth time interval.
     '''
 
     #Create A matrix and b vector used in the optimization problem.
-    t1 = time.time()
-    A_matrix = np.array(get_A_matrix(p,signature,n,dimension))
-    t_matA = time.time() - t1
+    A_matrix = np.array(get_A_matrix(signature[:,:-d**(n)],p,n-1,d))
 
-    b_vector = math.factorial(n+1)*np.array(signatory.extract_signature_term(signature_next_step,dimension,int(n+1)))
+    b_vector = math.factorial(n+1)*np.array(signatory.extract_signature_term(signature,d,n))
 
     b_vector = b_vector.flatten()
 
     #SVD
-    t1 = time.time()
     U,Sigma,V = np.linalg.svd(A_matrix,full_matrices=True)
-    t_svd = time.time() - t1
-
-    print('Elapsed time for getting A', t_matA)
-    print('Elapsed time for svd', t_svd)
 
     Y = (U.T)@b_vector
     #Only take the d-first values of Y
 
-    Y = Y[0:dimension]
+    Y = Y[0:d]
 
     #Compute optimal x
 
@@ -137,28 +149,62 @@ def solve_optimization_problem(signature,signature_next_step,p,n,dimension):
     return x_optimal
 
 
-def invert_signature(signature_full,n,first_point,dimension):
+def invert_signature(signature,n,d,first_point=None):
     """Recontruct the path from its signature
 
     Arguments
     ---------
-    signature_full: signature truncated at order n+1
-    n: order of signature used for the reconstruction
+        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
+            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
+
+        n : int
+            Depth of the signature.
+        
+        d : int
+            Dimension of the underlying path.
+
+        first_point: optional, array, shape (d,)
+            Initial point of the path. If None, the reconstructed path is set to begin at zero.
+
+    Returns
+    -------
+        reconstructed_path: array, shape (n+1,d,)
+            The inverted path. 
     """
 
-    signature_pre=signature_full[:,:-dimension**(n+1)]
+    reconstructed_path_derivatives = np.zeros((n,d))
 
-    reconstructed_path_derivatives = np.zeros((n+1,dimension))
+    reconstructed_path = np.zeros((n+1,d))
+    
+    if first_point is not None:
+        reconstructed_path[0,:]=first_point
 
-    reconstructed_path = np.zeros((n+2,dimension))
-    reconstructed_path[0,:]=first_point
+    for p in np.arange(1,n+1):
 
-    for p in np.arange(1,n+2):
-
-        x_optimal = solve_optimization_problem(signature_pre, signature_full,p,n=n,dimension=dimension)
+        x_optimal = solve_optimization_problem(signature,p,n,d)
 
         reconstructed_path_derivatives[p-1,:] = x_optimal
 
-        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/(n+1))
+        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/n)
 
     return(reconstructed_path)
+
+
+if __name__ == '__main__':
+    n=2
+    d=5
+    test_path = torch.rand((1,10,d))
+    signature_test = signatory.signature(test_path,n)
+    print(signature_test.shape)
+    x=[1,2,3,4,5]
+    p=3
+    #A_matrix=get_A_matrix(signature_test,p,n,d)
+    #signature = signatory.signature(test_path, 2)
+    signature_next = signatory.signature(test_path,n+1)
+
+    solve_optimization_problem(signature_next,p,n+1,d)
+    invert_signature(signature_next,n+1,d,first_point=torch.zeros(d))
+
+
+
+
