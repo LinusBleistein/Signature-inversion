@@ -5,7 +5,28 @@ import torch
 import signatory
 import itertools
 
-from tools import get_length
+
+def get_length(signature,n,d): 
+    '''This function approximates the length of the path through the signature.
+    
+    Arguments
+    ---------
+        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
+            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
+
+        n : int
+            Depth of the signature.
+        
+        d : int
+            Dimension of the underlying path.
+    
+    '''
+    
+    last_signature_term = signatory.extract_signature_term(signature,d,int(n))
+    
+    return torch.norm(math.factorial(n)*last_signature_term,2)**(1/n)
+
+
 
 def Insertion(signature,x,p,n,d):
     '''This function computes the Insertion operator taken at x, for parameters p and n.
@@ -97,7 +118,7 @@ def get_A_matrix(signature,p,n,d):
 
     A = A.reshape(d**(n+1),d)
 
-    length = get_length(signature,d,n)
+    length = get_length(signature,n,d)
     return length*A
 
 def solve_optimization_problem(signature,p,n,d):
