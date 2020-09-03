@@ -4,6 +4,7 @@ import torch
 
 import signatory
 import itertools
+import time
 
 
 def get_length(signature,n,d): 
@@ -58,28 +59,19 @@ def Insertion(signature,x,p,n,d):
     #Get the last (n-th) term of the signature as a tensor of size (R^d)^{\otimes n}
 
     last_signature_term = signatory.extract_signature_term(signature,d,n)
-    last_signature_term=last_signature_term.view([d]*int(n))
+    last_signature_term=last_signature_term.view([d]*int(n)).unsqueeze_(p-1)
 
-    #Add a dimension, since the output of the operator should be in (R^d)^{\otimes (n+1)}
-    new_tensor=torch.empty([d]*(n+1))
+    sig_new_tensor=last_signature_term.expand([d]*(n+1))
 
-    #Creates a list containing all possible coordinates of the big tensor.
-    #This list is of length d**n.
+    new_shape=[1]*(p-1)+[d]+[1]*(n+1-p)
+    repeat_points=[d]*(p-1)+[1]+[d]*(n+1-p)
 
-    coordinates_list = list(itertools.product(torch.arange(d),repeat= n+1))
+    x_new_tensor=torch.tensor(x).view(new_shape)
+    x_new_tensor=x_new_tensor.repeat(repeat_points)
 
-    #Every element of coordinates_list is a coordinate of the new tensor, which has d^(n+1) coordinates.
 
-    #Computes the Insertion operator.
-    for coordinate in coordinates_list:
-        coordinate = list(coordinate)
+    return math.factorial(n)*sig_new_tensor*x_new_tensor
 
-        new_coordinate = coordinate.copy()
-        del new_coordinate[p-1]
-
-        new_tensor[tuple(coordinate)] = last_signature_term[tuple(new_coordinate)]*x[coordinate[p-1]]
-
-    return math.factorial(n)*new_tensor
 
 def get_A_matrix(signature,p,n,d):
     '''This function creates the matrix lenght_of_path*A, used in the optimization problem.
@@ -106,7 +98,7 @@ def get_A_matrix(signature,p,n,d):
 
     #Create basis of R^d
 
-    basis = torch.diag(torch.ones(d))
+    basis = torch.eye(d)
 
     #Evaluate the insertion operator on the basis
 
@@ -147,14 +139,22 @@ def solve_optimization_problem(signature,p,n,d):
     '''
 
     #Create A matrix and b vector used in the optimization problem.
+    time1=time.time()
+
     A_matrix = np.array(get_A_matrix(signature[:,:-d**(n)],p,n-1,d))
 
-    b_vector = math.factorial(n+1)*np.array(signatory.extract_signature_term(signature,d,n))
+    time2=time.time()
+    #print("Get A matrix____",time1-time2)
+
+    b_vector = math.factorial(n)*np.array(signatory.extract_signature_term(signature,d,n))
 
     b_vector = b_vector.flatten()
 
     #SVD
+    #print(A_matrix.shape)
     U,Sigma,V = np.linalg.svd(A_matrix,full_matrices=True)
+    time3=time.time()
+    #print('Solve SVD_____',time3-time2)
 
     Y = (U.T)@b_vector
     #Only take the d-first values of Y
@@ -193,30 +193,31 @@ def invert_signature(signature,n,d,first_point=None):
             The inverted path. 
     """
 
-    reconstructed_path_derivatives = np.zeros((n,d))
+    reconstructed_path_derivatives = torch.zeros((n,d))
 
-    reconstructed_path = np.zeros((n+1,d))
+    reconstructed_path = torch.zeros((n+1,d))
     
     if first_point is not None:
         reconstructed_path[0,:]=first_point
 
-    for p in np.arange(1,n+1):
-
+    for p in torch.arange(1,n+1):
         x_optimal = solve_optimization_problem(signature,p,n,d)
 
-        reconstructed_path_derivatives[p-1,:] = x_optimal
+        reconstructed_path_derivatives[p-1,:] = torch.tensor(x_optimal)
 
-        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/n)
+        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/(n))
 
     return(reconstructed_path)
 
 
 if __name__ == '__main__':
-    n=3
-    d=5
-    test_path = torch.rand((1,10,d))
+    n=9
+    d=3
+    p=3
+    
+    test_path = torch.rand((1,100,d))
     signature_test = signatory.signature(test_path,n)
-
+    print(signature_test.shape)
     invert_signature(signature_test,n,d,first_point=torch.zeros(d))
 
 
