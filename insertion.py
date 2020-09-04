@@ -1,4 +1,3 @@
-import numpy as np
 import math
 import torch
 
@@ -103,7 +102,7 @@ def get_A_matrix(signature,p,n,d):
     #Evaluate the insertion operator on the basis
 
     A = torch.zeros([d**(n + 1),d])
-    for row in np.arange(d):
+    for row in torch.arange(d):
         base_vector = basis[row,:]
         insertion_tensor = Insertion(signature,base_vector,p,n,d)
         A[:,row]=insertion_tensor.flatten()
@@ -141,29 +140,35 @@ def solve_optimization_problem(signature,p,n,d):
     #Create A matrix and b vector used in the optimization problem.
     time1=time.time()
 
-    A_matrix = np.array(get_A_matrix(signature[:,:-d**(n)],p,n-1,d))
+    A_matrix = get_A_matrix(signature[:,:-d**(n)],p,n-1,d)
 
     time2=time.time()
     #print("Get A matrix____",time1-time2)
 
-    b_vector = math.factorial(n)*np.array(signatory.extract_signature_term(signature,d,n))
+    b_vector = math.factorial(n)*signatory.extract_signature_term(signature,d,n)
 
     b_vector = b_vector.flatten()
 
     #SVD
-    #print(A_matrix.shape)
-    U,Sigma,V = np.linalg.svd(A_matrix,full_matrices=True)
+    device = A_matrix.device
+    A_matrix = A_matrix.cpu()
+
+    U,Sigma,V = torch.svd(A_matrix,some=True)
+
+    U = U.to(device)
+    Sigma = Sigma.to(device)
+    V = V.to(device)
+
     time3=time.time()
     #print('Solve SVD_____',time3-time2)
 
-    Y = (U.T)@b_vector
+    Y = (U.T)@b_vector.float()
     #Only take the d-first values of Y
-
     Y = Y[0:d]
 
     #Compute optimal x
 
-    x = (1/np.linalg.norm(Y))*Y
+    x = (1/torch.norm(Y))*Y
 
     x_optimal = V@x
 
@@ -211,7 +216,7 @@ def invert_signature(signature,n,d,first_point=None):
 
 
 if __name__ == '__main__':
-    n=9
+    n=11
     d=3
     p=3
     
