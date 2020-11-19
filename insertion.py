@@ -1,30 +1,6 @@
-import math
 import torch
-
 import signatory
-import itertools
-import time
 
-
-def get_length(signature,n,d): 
-    '''This function approximates the length of the path through the signature.
-    
-    Arguments
-    ---------
-        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
-            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
-
-        n : int
-            Depth of the signature.
-        
-        d : int
-            Dimension of the underlying path.
-    
-    '''
-    
-    last_signature_term = signatory.extract_signature_term(signature,d,int(n))
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    return torch.norm(factorial_n*last_signature_term,2)**(1/n)
 
 
 def get_A_matrix(signature,p,n,d):
@@ -59,13 +35,10 @@ def get_A_matrix(signature,p,n,d):
     last_signature_term = signatory.extract_signature_term(signature,d,n)
     last_signature_term=last_signature_term.view([d]*int(n)).unsqueeze_(p-1)
     sig_new_tensor=last_signature_term.expand([d]*(n+2))
-    
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    A=(factorial_n*new_B*sig_new_tensor).flatten(start_dim=1)
 
-    
-    length = get_length(signature,n,d)
-    return length*A
+    A=(new_B*sig_new_tensor).flatten(start_dim=1)
+
+    return A.T
 
 def solve_optimization_problem(signature,p,n,d):
 
@@ -92,22 +65,16 @@ def solve_optimization_problem(signature,p,n,d):
             Solution of the optimization problem, approximation of the derivative of the path on the pth time interval.
     '''
 
-    #Create A matrix and b vector used in the optimization problem.
-
     A_matrix = get_A_matrix(signature[:,:-d**(n)],p,n-1,d)
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    b_vector =factorial_n*signatory.extract_signature_term(signature,d,n)
+    b_vector = n*signatory.extract_signature_term(signature,d,n)
 
-    b_vector =b_vector.flatten()
+    b_vector = b_vector.flatten()
 
+    x_optimal=(A_matrix.T@b_vector)
 
-    # QR decomposition
-    Q,R=torch.qr(A_matrix.T.double(),some=True)
+    sign_1 = signatory.extract_signature_term(signature, d, n - 1)
 
-    z=(R.T)@(Q.T)@b_vector
-    x_optimal=z/torch.norm(z)
-
-    return x_optimal
+    return x_optimal/(torch.norm(sign_1)**2)
 
 
 def invert_signature(signature,n,d,first_point=None):
@@ -151,7 +118,7 @@ def invert_signature(signature,n,d,first_point=None):
 
 
 if __name__ == '__main__':
-    n=10
+    n=8
     d=5
     p=2
     
