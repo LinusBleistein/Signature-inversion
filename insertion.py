@@ -125,4 +125,4 @@ if __name__ == '__main__':
     
     test_path = torch.rand((batch_test, 100, channels_test))
     signature_test = signatory.signature(test_path, depth_test)
-    invert_signature(signature_test, depth_test, channels_test).shape
+    invert_signature(signature_test, depth_test, channels_test)
