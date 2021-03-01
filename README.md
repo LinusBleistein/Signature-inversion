@@ -1,4 +1,4 @@
-# Signature-inversion
+# Signature inversion
 
 This code implements the insertion algorithm of Chang and Lyons (2019) to invert signatures.
 
@@ -9,7 +9,7 @@ from insertion import invert_signature
 
 inverted_path = invert_signature(sig, depth, d)
 ```
-Note that `sig` should not contain the constant term 1, as is done by default in the signatory package. In other words, `sig`should be the output of `signatory.signature(path, depth)`. Note also that the inverted path is obtained up to translations. Information about the initial position of the path x0 may be added as an extra argument with:
+Note that `sig` should not contain the constant term 1, as is done by default in the signatory package. In other words, `sig` should be the output of `signatory.signature(path, depth)`, where `path`is a tensor of shape `(batch, length, d)`. Note also that the inverted path is obtained up to translations. Information about the initial position of the path x0 may be added as an extra argument with:
 
 ```
 inverted_path = invert_signature(sig, depth, d, initial_position=x0)
