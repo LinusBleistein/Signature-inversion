@@ -1,162 +1,128 @@
-import math
+import signatory
 import torch
 
-import signatory
-import itertools
-import time
 
+def get_insertion_matrix(signature, insertion_position, depth, channels):
+    """This function creates the matrix corresponding to the insertion map, used in the optimization problem.
 
-def get_length(signature,n,d): 
-    '''This function approximates the length of the path through the signature.
-    
-    Arguments
-    ---------
-        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
-            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
-
-        n : int
-            Depth of the signature.
+     Arguments:
+        signature: torch.Tensor, shape (batch, channels + channels^2 + ... + channels^depth)
+            Batch of signatures truncated at order depth: output of signatory.signature(path, depth), where path is a
+            tensor of shape (batch, length, channels)
         
-        d : int
-            Dimension of the underlying path.
-    
-    '''
-    
-    last_signature_term = signatory.extract_signature_term(signature,d,int(n))
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    return torch.norm(factorial_n*last_signature_term,2)**(1/n)
-
-
-def get_A_matrix(signature,p,n,d):
-    '''This function creates the matrix lenght_of_path*A, used in the optimization problem.
-
-     Arguments
-    ---------
-        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
-            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
-        
-        p : int
+        insertion_position: int
             Insertion spot.
 
-        n : int
+        depth: int
             Depth of the signature.
         
-        d : int
-            Dimension of the underlying path.
+        channels: int
+            The number of channels of the paths that were used to compute signature.
 
-    Returns
-    -------
-        A: torch.tensor, shape (d^(n+1),d)
+    Returns:
+        A: torch.Tensor, shape (batch, channels, channels^(depth+1))
             Matrix A representing the linear insertion map.
-    '''
-
-    B=torch.eye(d)
-    new_shape=[d]+[1]*(p-1)+[d]+[1]*(n+1-p)
-    repeat_points=[1]+[d]*(p-1)+[1]+[d]*(n+1-p)
-    new_B=B.view(new_shape)
-    new_B=new_B.repeat(repeat_points)
-
-    last_signature_term = signatory.extract_signature_term(signature,d,n)
-    last_signature_term=last_signature_term.view([d]*int(n)).unsqueeze_(p-1)
-    sig_new_tensor=last_signature_term.expand([d]*(n+2))
-    
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    A=(factorial_n*new_B*sig_new_tensor).flatten(start_dim=1)
-
-    
-    length = get_length(signature,n,d)
-    return length*A
-
-def solve_optimization_problem(signature,p,n,d):
-
-    '''This function solves the optimization problem that allows to approximate the derivatives of the path.
-        of the path.
-
-    Arguments
-    ---------
-        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
-            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
-        
-        p : int
-            Insertion spot.
-
-        n : int
-            Depth of the signature.
-        
-        d : int
-            Dimension of the underlying path.
-
-    Returns
-    -------
-        x_optimal: array, shape (d,)
-            Solution of the optimization problem, approximation of the derivative of the path on the pth time interval.
-    '''
-
-    #Create A matrix and b vector used in the optimization problem.
-
-    A_matrix = get_A_matrix(signature[:,:-d**(n)],p,n-1,d)
-    factorial_n=torch.tensor(n+1).float().lgamma().exp()
-    b_vector =factorial_n*signatory.extract_signature_term(signature,d,n)
-
-    b_vector =b_vector.flatten()
-
-
-    # QR decomposition
-    Q,R=torch.qr(A_matrix.T.double(),some=True)
-
-    z=(R.T)@(Q.T)@b_vector
-    x_optimal=z/torch.norm(z)
-
-    return x_optimal
-
-
-def invert_signature(signature,n,d,first_point=None):
-    """Recontruct the path from its signature
-
-    Arguments
-    ---------
-        signature : torch.Tensor, shape (1,(d^(n+1)-d^n)/(d-1),)
-            Signature of a path truncated at order n. Its length is the sum from k=1 to n of d^k.
-
-        n : int
-            Depth of the signature.
-        
-        d : int
-            Dimension of the underlying path.
-
-        first_point: optional, array, shape (d,)
-            Initial point of the path. If None, the reconstructed path is set to begin at zero.
-
-    Returns
-    -------
-        reconstructed_path: array, shape (n+1,d,)
-            The inverted path. 
     """
 
-    reconstructed_path_derivatives = torch.zeros((n,d))
+    batch = signature.shape[0]
+    B = torch.cat(batch * [torch.eye(channels)])
+    new_shape = [batch] + [channels] + [1] * (insertion_position-1) + [channels] + [1] * (depth + 1 -
+                                                                                          insertion_position)
+    repeat_points = [1, 1] + [channels] * (insertion_position-1) + [1] + [channels] * (depth + 1 - insertion_position)
+    new_B = B.view(new_shape)
+    new_B = new_B.repeat(repeat_points)
 
-    reconstructed_path = torch.zeros((n+1,d))
+    last_signature_term = signatory.extract_signature_term(signature, channels, depth)
+    last_signature_term = last_signature_term.view([batch] + [channels] * int(depth)).unsqueeze(insertion_position)
+    repeat_points_sig = [1, channels] + [1] * (insertion_position - 1) + [channels] + [1] * (depth + 1 - insertion_position)
+    sig_new_tensor = last_signature_term.unsqueeze(1).repeat(repeat_points_sig)
+
+    A = (new_B * sig_new_tensor).flatten(start_dim=2)
+    return A
+
+
+def solve_optimization_problem(signature, insertion_position, depth, channels):
+    """This function solves the optimization problem that allows to approximate the derivatives of the path.
+        of the path.
+
+    Arguments:
+        signature : torch.Tensor, shape (batch, channels + channels^2 + ... + channels^depth)
+            Batch of signatures truncated at order depth: output of signatory.signature(path, depth), where path is a
+            tensor of shape (batch, length, channels)
+
+        insertion_position : int
+            Insertion spot.
+
+        depth : int
+            Depth of the signature.
+        
+        channels : int
+            The number of channels of the paths that were used to compute signature.
+
+    Returns:
+        x_optimal: torch.Tensor, shape (batch, channels)
+            Solution of the optimization problem, approximation of the derivatives of the paths on the interval
+            indexed by insertion_position.
+    """
+
+    A_matrix = get_insertion_matrix(signature[:, :-channels ** depth], insertion_position, depth - 1, channels)
+    b_vector = depth * signatory.extract_signature_term(signature, channels, depth)
+
+    x_optimal = torch.matmul(A_matrix, b_vector.unsqueeze(-1)).squeeze(-1)
+
+    sign_1 = signatory.extract_signature_term(signature, channels, depth - 1)
+
+    return x_optimal / (torch.norm(sign_1, dim=1).unsqueeze(-1) ** 2)
+
+
+def invert_signature(signature, depth, channels, initial_position=None):
+    """Reconstruct the path from its signature
+
+    Arguments:
+        signature: torch.Tensor, shape (batch, channels + channels^2 + ... + channels^depth)
+            Batch of signatures truncated at order depth: output of signatory.signature(path, depth), where path is a
+            tensor of shape (batch, length, channels)
+
+        depth: int
+            Depth of the signature.
+        
+        channels: int
+            The number of channels of the paths that were used to compute signature.
+
+        initial_position: optional, torch.Tensor, shape (batch, channels)
+            Initial point of the paths. If None, the reconstructed paths are set to begin at zero.
+
+    Returns:
+        path: torch.Tensor, shape (batch, depth+1, channels)
+            Batch of inverted paths.
+    """
+    if signatory.signature_channels(channels, depth) != signature.shape[1]:
+        raise ValueError("channels and depth do not correspond to signature shape.")
+
+    batch = signature.shape[0]
+    path_derivatives = torch.zeros((batch, depth, channels))
+    path = torch.zeros((batch, depth+1, channels))
     
-    if first_point is not None:
-        reconstructed_path[0,:]=first_point
+    if initial_position is not None:
+        path[:, 0, :] = initial_position
 
-    for p in torch.arange(1,n+1):
-        x_optimal = solve_optimization_problem(signature,p,n,d)
+    if depth == 1:
+        path[:, 1, :] = path[:, 0, :] + signature
+    else:
+        for insertion_position in torch.arange(1, depth + 1):
+            x_optimal = solve_optimization_problem(signature, insertion_position, depth, channels)
+            path_derivatives[:, insertion_position-1, :] = x_optimal
+            path[:, insertion_position, :] = (path[:, insertion_position - 1, :]
+                                              + path_derivatives[:, insertion_position - 1, :] * (1 / depth))
 
-        reconstructed_path_derivatives[p-1,:] = x_optimal
-
-        reconstructed_path[p,:] = reconstructed_path[p-1,:] + reconstructed_path_derivatives[p-1,:]*(1/(n))
-
-    return(reconstructed_path)
+    return path
 
 
 if __name__ == '__main__':
-    n=10
-    d=5
-    p=2
+    depth_test = 1
+    channels_test = 2
+    batch_test = 10
     
-    test_path = torch.rand((1,100,d))
-    signature_test = signatory.signature(test_path,n)
-    print(signature_test.shape)
-    invert_signature(signature_test,n,d)
-
+    test_path = torch.rand((batch_test, 100, channels_test))
+    signature_test = signatory.signature(test_path, depth_test)
+    invert_signature(signature_test, depth_test, channels_test).shape
